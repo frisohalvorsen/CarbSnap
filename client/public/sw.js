@@ -1,4 +1,4 @@
-const CACHE = "carbsnap-v1";
+const CACHE = "carbsnap-v2";
 const PRECACHE = ["/", "/index.html", "/manifest.json", "/icon.svg"];
 
 self.addEventListener("install", (e) => {
@@ -21,18 +21,17 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(request.url);
   if (url.pathname.startsWith("/api/")) return;
 
+  // Network-first: always try to get fresh content from the server.
+  // Only fall back to cache if the network is unavailable (offline).
   e.respondWith(
-    caches.match(request).then((cached) => {
-      const fetchPromise = fetch(request)
-        .then((resp) => {
-          if (resp && resp.status === 200 && resp.type === "basic") {
-            const clone = resp.clone();
-            caches.open(CACHE).then((c) => c.put(request, clone));
-          }
-          return resp;
-        })
-        .catch(() => cached);
-      return cached || fetchPromise;
-    })
+    fetch(request)
+      .then((resp) => {
+        if (resp && resp.status === 200 && resp.type === "basic") {
+          const clone = resp.clone();
+          caches.open(CACHE).then((c) => c.put(request, clone));
+        }
+        return resp;
+      })
+      .catch(() => caches.match(request))
   );
 });
