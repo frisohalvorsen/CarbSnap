@@ -39,14 +39,31 @@ export default function Overview({ refreshKey }) {
     return arr;
   }, [all, training, days, range, today]);
 
-  const avgCarbs   = buckets.reduce((s,b) => s + b.carbs,   0) / days;
-  const avgProtein = buckets.reduce((s,b) => s + b.protein, 0) / days;
-  const avgCals    = buckets.reduce((s,b) => s + b.calories,0) / days;
+  // Only count days that have at least one logged meal
+  const loggedDays  = buckets.filter(b => b.meals.length > 0);
+  const loggedCount = loggedDays.length;
 
+  // Averages — divided by logged days only (not total days in range)
+  const avgCarbs   = loggedCount ? loggedDays.reduce((s,b) => s + b.carbs,   0) / loggedCount : 0;
+  const avgProtein = loggedCount ? loggedDays.reduce((s,b) => s + b.protein, 0) / loggedCount : 0;
+  const avgCals    = loggedCount ? loggedDays.reduce((s,b) => s + b.calories,0) / loggedCount : 0;
+
+  // Protein trend — also on logged days only
   const half = Math.floor(days / 2);
-  const firstP  = buckets.slice(0, half).reduce((s,b) => s + b.protein, 0) / Math.max(1, half);
-  const secondP = buckets.slice(half).reduce((s,b) => s + b.protein, 0) / Math.max(1, days - half);
+  const firstLogged  = buckets.slice(0, half).filter(b => b.meals.length > 0);
+  const secondLogged = buckets.slice(half).filter(b => b.meals.length > 0);
+  const firstP  = firstLogged.length  ? firstLogged.reduce((s,b)  => s + b.protein, 0) / firstLogged.length  : 0;
+  const secondP = secondLogged.length ? secondLogged.reduce((s,b) => s + b.protein, 0) / secondLogged.length : 0;
   const trend = secondP - firstP;
+
+  // Key metrics
+  const proteinGoal    = profile?.proteinGoal || 0;
+  const daysHitProtein = proteinGoal > 0 ? loggedDays.filter(b => b.protein >= proteinGoal).length : null;
+  const proteinHitRate = (daysHitProtein != null && loggedCount > 0) ? daysHitProtein / loggedCount : null;
+  const allMeals       = buckets.flatMap(b => b.meals);
+  const mealCount      = allMeals.length;
+  const avgMealProtein = mealCount ? allMeals.reduce((s,e) => s + (e.protein || 0), 0) / mealCount : 0;
+  const avgMealCarbs   = mealCount ? allMeals.reduce((s,e) => s + (e.carbs   || 0), 0) / mealCount : 0;
 
   const activeMeals = activeDay ? (buckets.find(b => b.key === activeDay)?.meals || []) : [];
   const filteredMeals = query
@@ -105,26 +122,88 @@ export default function Overview({ refreshKey }) {
         </div>
       </div>
 
-      {/* Averages row */}
+      {/* Averages row — based on logged days only */}
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded-3xl p-3 bg-gradient-to-br from-orange-400 to-amber-500 text-white shadow-md shadow-orange-200/60 text-center">
           <div className="text-[9px] font-black uppercase tracking-wider opacity-80">Avg Carbs</div>
-          <div className="hero-num text-2xl font-black">{round(avgCarbs)}<span className="text-xs opacity-80 ml-0.5">g</span></div>
-          <div className="text-[9px] opacity-70">per day</div>
+          <div className="hero-num text-2xl font-black">{loggedCount ? round(avgCarbs) : "—"}<span className="text-xs opacity-80 ml-0.5">{loggedCount ? "g" : ""}</span></div>
+          <div className="text-[9px] opacity-70">{loggedCount ? `${loggedCount}d logged` : "no data"}</div>
         </div>
         <div className="rounded-3xl p-3 bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-md shadow-indigo-200/60 text-center">
           <div className="text-[9px] font-black uppercase tracking-wider opacity-80">Avg Protein</div>
-          <div className="hero-num text-2xl font-black">{round(avgProtein)}<span className="text-xs opacity-80 ml-0.5">g</span></div>
-          <div className={`text-[9px] font-bold mt-0.5 ${trend >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
-            {trend >= 0 ? "▲" : "▼"} {Math.abs(round(trend))}g trend
-          </div>
+          <div className="hero-num text-2xl font-black">{loggedCount ? round(avgProtein) : "—"}<span className="text-xs opacity-80 ml-0.5">{loggedCount ? "g" : ""}</span></div>
+          {loggedCount > 1
+            ? <div className={`text-[9px] font-bold mt-0.5 ${trend >= 0 ? "text-emerald-300" : "text-rose-300"}`}>{trend >= 0 ? "▲" : "▼"} {Math.abs(round(trend))}g trend</div>
+            : <div className="text-[9px] opacity-70">{loggedCount ? `${loggedCount}d logged` : "no data"}</div>}
         </div>
         <div className="rounded-3xl p-3 bg-gradient-to-br from-amber-400 to-yellow-500 text-white shadow-md shadow-amber-200/60 text-center">
           <div className="text-[9px] font-black uppercase tracking-wider opacity-80">Avg Cals</div>
-          <div className="hero-num text-2xl font-black">{Math.round(avgCals)}<span className="text-[9px] opacity-80 ml-0.5">kcal</span></div>
-          <div className="text-[9px] opacity-70">per day</div>
+          <div className="hero-num text-2xl font-black">{loggedCount ? Math.round(avgCals) : "—"}<span className="text-[9px] opacity-80 ml-0.5">{loggedCount ? "kcal" : ""}</span></div>
+          <div className="text-[9px] opacity-70">{loggedCount ? `${loggedCount}d logged` : "no data"}</div>
         </div>
       </div>
+
+      {/* Key Metrics */}
+      {loggedCount > 0 && (
+        <div className="card p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="font-black text-slate-900 text-sm flex items-center gap-2">
+              <span>📊</span> Key Metrics
+            </div>
+            <span className="text-[10px] font-bold text-slate-400">{range === "week" ? "this week" : "last 30 days"}</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+
+            {/* Days logged */}
+            <div className="rounded-2xl bg-slate-50 p-2.5 text-center space-y-1">
+              <div className="text-[9px] font-bold uppercase text-slate-400">Logged</div>
+              <div className="hero-num text-lg font-black text-slate-900 leading-none">
+                {loggedCount}<span className="text-slate-300 font-bold text-sm"> / {days}</span>
+              </div>
+              <div className="w-full bg-slate-200 rounded-full h-1.5">
+                <div className="bg-slate-700 h-1.5 rounded-full transition-all" style={{width:`${(loggedCount/days)*100}%`}}/>
+              </div>
+              <div className="text-[9px] text-slate-400">days</div>
+            </div>
+
+            {/* Protein goal hit rate */}
+            <div className="rounded-2xl bg-slate-50 p-2.5 text-center space-y-1">
+              <div className="text-[9px] font-bold uppercase text-slate-400">Protein goal</div>
+              {proteinHitRate != null ? (
+                <>
+                  <div className={`hero-num text-lg font-black leading-none ${proteinHitRate >= 0.7 ? "text-emerald-600" : proteinHitRate >= 0.4 ? "text-amber-500" : "text-rose-500"}`}>
+                    {daysHitProtein}<span className="text-slate-300 font-bold text-sm"> / {loggedCount}</span>
+                  </div>
+                  <div className="w-full bg-slate-200 rounded-full h-1.5">
+                    <div className={`h-1.5 rounded-full transition-all ${proteinHitRate >= 0.7 ? "bg-emerald-500" : proteinHitRate >= 0.4 ? "bg-amber-400" : "bg-rose-400"}`}
+                      style={{width:`${proteinHitRate*100}%`}}/>
+                  </div>
+                  <div className="text-[9px] text-slate-400">days hit</div>
+                </>
+              ) : (
+                <div className="text-[9px] text-slate-400">set goal in Profile</div>
+              )}
+            </div>
+
+            {/* Per meal averages */}
+            <div className="rounded-2xl bg-slate-50 p-2.5 text-center space-y-1">
+              <div className="text-[9px] font-bold uppercase text-slate-400">Per meal</div>
+              <div className="space-y-0.5">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[9px] font-bold text-indigo-500">P</span>
+                  <span className="hero-num text-sm font-black text-slate-900">{Math.round(avgMealProtein)}g</span>
+                </div>
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[9px] font-bold text-orange-500">C</span>
+                  <span className="hero-num text-sm font-black text-slate-900">{Math.round(avgMealCarbs)}g</span>
+                </div>
+              </div>
+              <div className="text-[9px] text-slate-400">{mealCount} meals</div>
+            </div>
+
+          </div>
+        </div>
+      )}
 
       {/* Plan vs Actual */}
       <div className="card p-4 space-y-3">

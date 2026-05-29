@@ -5,23 +5,88 @@ import { authHeader } from "../lib/auth.js";
 import { MacroHero, SecondaryMacros } from "../components/NutritionCards.jsx";
 import ConfidenceBadge from "../components/ConfidenceBadge.jsx";
 
+/* ── Date helpers ─────────────────────────────────────────────────────── */
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function yesterdayStr() {
+  const d = new Date(); d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function dateStrToTimestamp(str) {
+  // Use noon to avoid any timezone edge cases
+  const [y, m, d] = str.split("-").map(Number);
+  return new Date(y, m - 1, d, 12, 0, 0, 0).getTime();
+}
+function saveBtnLabel(dateStr) {
+  if (dateStr === todayStr())     return "Save to today →";
+  if (dateStr === yesterdayStr()) return "Save to yesterday →";
+  const d = new Date(dateStr + "T12:00:00");
+  return `Save to ${d.toLocaleDateString(undefined, { weekday:"short", day:"numeric", month:"short" })} →`;
+}
+
+/* ── DateChooser component ────────────────────────────────────────────── */
+function DateChooser({ value, onChange }) {
+  const tStr = todayStr();
+  const yStr = yesterdayStr();
+  const isToday     = value === tStr;
+  const isYesterday = value === yStr;
+  const isEarlier   = !isToday && !isYesterday;
+
+  const chip = (label, active, onClick) => (
+    <button onClick={onClick}
+      className={`px-3 py-1.5 rounded-full text-xs font-bold transition ${
+        active
+          ? "bg-slate-900 text-white shadow"
+          : "bg-white text-slate-500 border border-slate-200"
+      }`}>
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="bg-slate-50 rounded-2xl px-3 py-2.5 space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Log for</span>
+        <div className="flex gap-1.5">
+          {chip("Today",     isToday,     () => onChange(tStr))}
+          {chip("Yesterday", isYesterday, () => onChange(yStr))}
+          {chip("Earlier…",  isEarlier,   () => { if (!isEarlier) onChange(yStr); })}
+        </div>
+      </div>
+      {isEarlier && (
+        <input
+          type="date"
+          max={yStr}
+          value={value}
+          onChange={e => e.target.value && onChange(e.target.value)}
+          className="input py-2 text-sm w-full"
+        />
+      )}
+    </div>
+  );
+}
+
+/* ── Main Capture component ───────────────────────────────────────────── */
 export default function Capture({ onSaved, onAuthFail }) {
   const fileRef = useRef(null);
   const [imagePreview, setImagePreview] = useState(null);
-  const [imageThumb, setImageThumb] = useState(null);
-  const [imageBase64, setImageBase64] = useState(null);
-  const [mediaType, setMediaType] = useState("image/jpeg");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [result, setResult] = useState(null);
-  const [scale, setScale] = useState(1);
-  const [editedName, setEditedName] = useState("");
-  const [showManual, setShowManual] = useState(false);
+  const [imageThumb, setImageThumb]     = useState(null);
+  const [imageBase64, setImageBase64]   = useState(null);
+  const [mediaType, setMediaType]       = useState("image/jpeg");
+  const [loading, setLoading]           = useState(false);
+  const [error, setError]               = useState("");
+  const [result, setResult]             = useState(null);
+  const [scale, setScale]               = useState(1);
+  const [editedName, setEditedName]     = useState("");
+  const [showManual, setShowManual]     = useState(false);
+  const [selectedDate, setSelectedDate] = useState(todayStr);
 
   async function handleFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setError(""); setResult(null);
+    setError(""); setResult(null); setSelectedDate(todayStr());
     try {
       const { base64, mediaType, dataUrl, thumbDataUrl } = await fileToCompressedJpeg(file);
       setImagePreview(dataUrl); setImageThumb(thumbDataUrl);
@@ -64,7 +129,8 @@ export default function Capture({ onSaved, onAuthFail }) {
   function save() {
     if (!scaled) return;
     addEntry({
-      id: newId(), timestamp: Date.now(),
+      id: newId(),
+      timestamp: dateStrToTimestamp(selectedDate),
       imageThumbnail: imageThumb,
       foodName: editedName || scaled.foodName,
       portionGrams: scaled.portionGrams, portionLabel: scaled.portionLabel,
@@ -74,7 +140,7 @@ export default function Capture({ onSaved, onAuthFail }) {
       confidence: scaled.confidence,
     });
     setResult(null); setImagePreview(null); setImageThumb(null);
-    setImageBase64(null); setScale(1);
+    setImageBase64(null); setScale(1); setSelectedDate(todayStr());
     onSaved?.();
   }
 
@@ -96,6 +162,7 @@ export default function Capture({ onSaved, onAuthFail }) {
         <ManualEntry
           onSave={(e) => { addEntry(e); setShowManual(false); onSaved?.(); }}
           onCancel={() => setShowManual(false)}
+          onAuthFail={onAuthFail}
         />
       )}
 
@@ -164,25 +231,29 @@ export default function Capture({ onSaved, onAuthFail }) {
                   className="input py-2 w-28 text-sm" />
               </div>
             </div>
+
+            {/* Date chooser */}
+            <DateChooser value={selectedDate} onChange={setSelectedDate} />
           </div>
 
           <div className="grid grid-cols-2 gap-2">
             <button className="btn-ghost" onClick={() => analyze(imageBase64, mediaType, editedName)} disabled={loading}>
               🔄 Re-analyse
             </button>
-            <button className="btn-primary" onClick={save}>Save to today →</button>
+            <button className="btn-primary" onClick={save}>
+              {saveBtnLabel(selectedDate)}
+            </button>
           </div>
         </div>
       )}
-
     </div>
   );
 }
 
+/* ── WelcomeCard ──────────────────────────────────────────────────────── */
 function WelcomeCard({ onCapture, onManual }) {
   return (
     <div className="space-y-3">
-      {/* Hero illustration card */}
       <div className="rounded-3xl overflow-hidden relative" style={{background:"linear-gradient(135deg,#667eea 0%,#764ba2 100%)"}}>
         <div className="absolute top-4 right-4 w-32 h-32 rounded-full bg-white/10 blur-2xl"/>
         <div className="absolute bottom-0 left-0 w-24 h-24 rounded-full bg-white/10 blur-xl"/>
@@ -198,8 +269,6 @@ function WelcomeCard({ onCapture, onManual }) {
           </div>
         </div>
       </div>
-
-      {/* Feature chips */}
       <div className="grid grid-cols-4 gap-2">
         {[["🌾","Carbs","tile-carb","text-orange-600"],["💪","Protein","tile-protein","text-indigo-600"],
           ["🔥","Calories","tile-cal","text-amber-600"],["🥑","Fat","tile-fat","text-emerald-700"]].map(([e,l,bg,c])=>(
@@ -209,7 +278,6 @@ function WelcomeCard({ onCapture, onManual }) {
           </div>
         ))}
       </div>
-
       <button className="btn-primary w-full py-4 text-base rounded-2xl" onClick={onCapture}>
         📷  Take or choose a photo
       </button>
@@ -220,13 +288,15 @@ function WelcomeCard({ onCapture, onManual }) {
   );
 }
 
-function ManualEntry({ onSave, onCancel }) {
-  const [step, setStep]         = useState("input"); // "input" | "loading" | "result"
-  const [foodName, setFoodName] = useState("");
-  const [result, setResult]     = useState(null);
-  const [scale, setScale]       = useState(1);
+/* ── ManualEntry ──────────────────────────────────────────────────────── */
+function ManualEntry({ onSave, onCancel, onAuthFail }) {
+  const [step, setStep]             = useState("input");
+  const [foodName, setFoodName]     = useState("");
+  const [result, setResult]         = useState(null);
+  const [scale, setScale]           = useState(1);
   const [editedName, setEditedName] = useState("");
-  const [error, setError]       = useState("");
+  const [error, setError]           = useState("");
+  const [selectedDate, setSelectedDate] = useState(todayStr);
 
   const scaled = useMemo(() => {
     if (!result) return null;
@@ -280,7 +350,6 @@ function ManualEntry({ onSave, onCancel }) {
         <ConfidenceBadge value={scaled.confidence} />
       </div>
 
-      {/* Standard serving indicator */}
       <div className="flex items-center gap-2 bg-slate-50 rounded-2xl px-3 py-2">
         <span className="text-sm">📏</span>
         <span className="text-xs text-slate-500">
@@ -301,8 +370,10 @@ function ManualEntry({ onSave, onCancel }) {
         <input type="range" min="0.25" max="3" step="0.05" value={scale}
           onChange={e => setScale(Number(e.target.value))}
           className="w-full accent-amber-500" />
-        <div className="flex justify-between text-[10px] text-amber-600/60 font-semibold">
-          <span>¼ ×</span><span>1 ×</span><span>3 ×</span>
+        <div className="relative h-4 text-[10px] text-amber-600/60 font-semibold">
+          <span className="absolute left-0">¼ ×</span>
+          <span className="absolute" style={{left:"27.3%",transform:"translateX(-50%)"}}>1 ×</span>
+          <span className="absolute right-0">3 ×</span>
         </div>
         <div className="flex items-center gap-2">
           <label className="text-xs font-bold text-amber-700">Grams:</label>
@@ -315,17 +386,24 @@ function ManualEntry({ onSave, onCancel }) {
         </div>
       </div>
 
+      {/* Date chooser */}
+      <DateChooser value={selectedDate} onChange={setSelectedDate} />
+
       <div className="grid grid-cols-2 gap-2">
         <button className="btn-ghost" onClick={() => setStep("input")}>← Back</button>
         <button className="btn-primary" onClick={() => onSave({
-          id: newId(), timestamp: Date.now(), imageThumbnail: null,
+          id: newId(),
+          timestamp: dateStrToTimestamp(selectedDate),
+          imageThumbnail: null,
           foodName: editedName || scaled.foodName,
           portionGrams: scaled.portionGrams, portionLabel: scaled.portionLabel,
           carbs: round(scaled.carbs), calories: round(scaled.calories),
           protein: round(scaled.protein), fat: round(scaled.fat),
           sugar: round(scaled.sugar), fiber: round(scaled.fiber),
           confidence: scaled.confidence,
-        })}>Save to today →</button>
+        })}>
+          {saveBtnLabel(selectedDate)}
+        </button>
       </div>
     </div>
   );
