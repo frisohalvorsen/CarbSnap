@@ -27,6 +27,20 @@ function saveBtnLabel(dateStr) {
 }
 
 /* ── DateChooser component ────────────────────────────────────────────── */
+const CAL_MONTHS = ["January","February","March","April","May","June",
+  "July","August","September","October","November","December"];
+const CAL_DAYS = ["Mo","Tu","We","Th","Fr","Sa","Su"];
+
+function calCells(year, month) {
+  const firstDow = new Date(year, month, 1).getDay();
+  const offset   = (firstDow + 6) % 7; // Mon-start
+  const total    = new Date(year, month + 1, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < offset; i++) cells.push(null);
+  for (let d = 1; d <= total; d++) cells.push(d);
+  return cells;
+}
+
 function DateChooser({ value, onChange }) {
   const tStr = todayStr();
   const yStr = yesterdayStr();
@@ -34,35 +48,113 @@ function DateChooser({ value, onChange }) {
   const isYesterday = value === yStr;
   const isEarlier   = !isToday && !isYesterday;
 
+  const now = new Date();
+  const [showCal, setShowCal]   = useState(false);
+  const [calYear, setCalYear]   = useState(now.getFullYear());
+  const [calMonth, setCalMonth] = useState(now.getMonth());
+
+  function openCal() {
+    // Navigate to the month of the current value if already "earlier"
+    const ref = isEarlier ? new Date(value + "T12:00") : now;
+    setCalYear(ref.getFullYear());
+    setCalMonth(ref.getMonth());
+    setShowCal(true);
+  }
+
+  function prevMonth() {
+    if (calMonth === 0) { setCalYear(y => y - 1); setCalMonth(11); }
+    else setCalMonth(m => m - 1);
+  }
+  function nextMonth() {
+    const atNow = calYear === now.getFullYear() && calMonth === now.getMonth();
+    if (atNow) return;
+    if (calMonth === 11) { setCalYear(y => y + 1); setCalMonth(0); }
+    else setCalMonth(m => m + 1);
+  }
+
+  function pickDay(d) {
+    const str = `${calYear}-${String(calMonth+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+    if (str >= tStr) return; // today and future not allowed via Earlier
+    onChange(str);
+    setShowCal(false);
+  }
+
   const chip = (label, active, onClick) => (
     <button onClick={onClick}
-      className={`px-3 py-1.5 rounded-full text-xs font-bold transition ${
-        active
-          ? "bg-slate-900 text-white shadow"
-          : "bg-white text-slate-500 border border-slate-200"
+      className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+        active ? "bg-slate-900 text-white shadow" : "bg-white text-slate-500 border border-slate-200"
       }`}>
       {label}
     </button>
   );
 
+  const atNow = calYear === now.getFullYear() && calMonth === now.getMonth();
+
   return (
-    <div className="bg-slate-50 rounded-2xl px-3 py-2.5 space-y-2">
+    <div className="bg-slate-50 rounded-2xl px-3 py-2.5 space-y-3">
+      {/* Chips row */}
       <div className="flex items-center gap-2">
         <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Log for</span>
         <div className="flex gap-1.5">
-          {chip("Today",     isToday,     () => onChange(tStr))}
-          {chip("Yesterday", isYesterday, () => onChange(yStr))}
-          {chip("Earlier…",  isEarlier,   () => { if (!isEarlier) onChange(yStr); })}
+          {chip("Today",     isToday,     () => { onChange(tStr); setShowCal(false); })}
+          {chip("Yesterday", isYesterday, () => { onChange(yStr); setShowCal(false); })}
+          {chip("Earlier…",  isEarlier || showCal, () => showCal ? setShowCal(false) : openCal())}
         </div>
       </div>
-      {isEarlier && (
-        <input
-          type="date"
-          max={yStr}
-          value={value}
-          onChange={e => e.target.value && onChange(e.target.value)}
-          className="input py-2 text-sm w-full"
-        />
+
+      {/* Calendar dropdown */}
+      {showCal && (
+        <div className="space-y-2 pt-1">
+
+          {/* Month navigation */}
+          <div className="flex items-center justify-between px-1">
+            <button onClick={prevMonth}
+              className="w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-600 font-bold text-base">
+              ‹
+            </button>
+            <span className="text-xs font-black text-slate-800">
+              {CAL_MONTHS[calMonth]} {calYear}
+            </span>
+            <button onClick={nextMonth} disabled={atNow}
+              className={`w-7 h-7 rounded-full bg-white shadow-sm flex items-center justify-center font-bold text-base ${atNow ? "text-slate-200" : "text-slate-600"}`}>
+              ›
+            </button>
+          </div>
+
+          {/* Day-of-week headers */}
+          <div className="grid grid-cols-7">
+            {CAL_DAYS.map(d => (
+              <div key={d} className="text-center text-[9px] font-bold text-slate-400 py-0.5">{d}</div>
+            ))}
+          </div>
+
+          {/* Day cells */}
+          <div className="grid grid-cols-7 gap-0.5">
+            {calCells(calYear, calMonth).map((d, i) => {
+              if (!d) return <div key={i} />;
+              const str = `${calYear}-${String(calMonth+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+              const isPast     = str < tStr;
+              const isSelected = str === value && isEarlier;
+              return (
+                <button key={i} onClick={() => pickDay(d)} disabled={!isPast}
+                  className={`aspect-square rounded-xl text-xs font-bold transition-all ${
+                    isSelected ? "bg-slate-900 text-white shadow"
+                    : isPast   ? "bg-white text-slate-700 hover:bg-slate-100 active:bg-slate-200"
+                    :            "text-slate-300 cursor-default"
+                  }`}>
+                  {d}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Selected date label */}
+          {isEarlier && (
+            <p className="text-center text-[10px] font-semibold text-slate-500 pt-0.5">
+              {new Date(value + "T12:00:00").toLocaleDateString(undefined, { weekday:"long", day:"numeric", month:"long" })}
+            </p>
+          )}
+        </div>
       )}
     </div>
   );
