@@ -1,0 +1,13 @@
+{
+  "name": "CarbSnap",
+  "short_name": "CarbSnap",
+  "description": "Snap a photo of your food, log carbs and protein.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#f97316",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

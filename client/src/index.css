@@ -1,0 +1,31 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  background: #eef2f7;
+}
+
+@layer components {
+  .pill { @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold; }
+  .card { @apply bg-white rounded-3xl shadow-sm; }
+  .btn  { @apply inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-2xl font-bold text-base active:scale-[0.97] transition-all duration-150; }
+  .btn-primary { @apply btn bg-slate-900 text-white shadow-lg shadow-slate-900/20; }
+  .btn-ghost   { @apply btn bg-white border border-slate-200 text-slate-700; }
+  .input { @apply w-full px-4 py-3 rounded-2xl border border-slate-200 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-400/30; }
+
+  /* Pastel card tints */
+  .tile-carb     { background: #fff4eb; }
+  .tile-protein  { background: #f0edff; }
+  .tile-cal      { background: #fffbe6; }
+  .tile-fat      { background: #edfff5; }
+  .tile-pink     { background: #fff0f3; }
+  .tile-blue     { background: #edf4ff; }
+}
+
+.hero-num { font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+.blob     { border-radius: 60% 40% 55% 45% / 50% 60% 40% 50%; }
+.blob-2   { border-radius: 45% 55% 40% 60% / 60% 40% 55% 45%; }
